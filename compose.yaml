@@ -1,0 +1,64 @@
+services:
+  construction-ai-api:
+    image: construction-ai-inference:1.0.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: construction_ai_service
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${INTERNAL_BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-8000}:8000"
+    environment:
+      API_KEY: "${API_KEY:?Set API_KEY in the protected .env file}"
+      MODEL_PATH: "${MODEL_PATH:-/models/construction-safety.pt}"
+      MODEL_ID: "${MODEL_ID:-construction-safety-model}"
+      MODEL_VERSION: "${MODEL_VERSION:-unspecified}"
+      GPU0_UUID: "${GPU0_UUID:?Set GPU0_UUID to the host production GPU UUID}"
+      NVIDIA_VISIBLE_DEVICES: "${GPU0_UUID:?Set GPU0_UUID to the host production GPU UUID}"
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      INFERENCE_DEVICE: cuda:0
+      CONFIDENCE_THRESHOLD: "${CONFIDENCE_THRESHOLD:-0.25}"
+      IOU_THRESHOLD: "${IOU_THRESHOLD:-0.45}"
+      IMAGE_SIZE: "${IMAGE_SIZE:-640}"
+      INFERENCE_TIMEOUT_SECONDS: "${INFERENCE_TIMEOUT_SECONDS:-120}"
+      MAX_UPLOAD_BYTES: "${MAX_UPLOAD_BYTES:-10485760}"
+      MAX_INFLIGHT_INFERENCES: "${MAX_INFLIGHT_INFERENCES:-1}"
+      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-}"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./models:/models:ro
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=512m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 8G
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids:
+                - "${GPU0_UUID:?Set GPU0_UUID to the host production GPU UUID}"
+              capabilities: [gpu]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    stop_grace_period: 40s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 3

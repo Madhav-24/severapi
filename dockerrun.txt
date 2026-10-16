@@ -1,0 +1,2 @@
+docker info
+docker build -t construction-ai-inference:1.0.0 .
