@@ -91,6 +91,67 @@ Values are illustrative; actual classes/results depend exclusively on the
 supplied model. Set `MODEL_VERSION` to the approved weights release label; the
 default `unspecified` does not claim a training/version history.
 
+## Intern YOLO training API
+
+`app.training_api:app` is a separate API for interns to submit one YOLO object-
+detection training job at a time. It does not change the inference service on
+port 8000. The training API uses `yolov8n.pt` as its pretrained starting model;
+Ultralytics downloads that checkpoint on the first job if it is not cached.
+
+Prepare the protected training environment on the GPU host:
+
+```bash
+cp .env.training.example .env.training
+chmod 600 .env.training
+openssl rand -hex 32
+editor .env.training
+nvidia-smi -L
+```
+
+Set the generated value as `TRAINING_API_KEY`, choose the dedicated GPU's exact
+UUID for `TRAINING_GPU_UUID`, and select the host interface in
+`TRAINING_HOST_BIND_ADDRESS`. The default `127.0.0.1` is host-only. For interns
+on an approved VPN/internal network, use the GPU host's VPN/internal IP only
+after firewall rules restrict the port to those clients. Do not publish this
+training API to the public internet; use an internal TLS proxy for remote
+access. Never commit `.env.training` or share its API key outside the approved
+team.
+
+Start the CUDA container (Docker NVIDIA GPU support must already be working):
+
+```bash
+bash scripts/run_training_container.sh
+```
+
+The script prints the API and docs URLs. For the default settings, the docs
+page is `http://127.0.0.1:8001/docs`; remote interns need the approved internal
+host address in that URL. Check `/health/ready` before sharing it. This is a
+separate GPU process from inference; choose a GPU not in use by another
+workload. The first image build and first model download require registry and
+internet access, respectively.
+
+Interns upload one `.zip` dataset through `POST /v1/training/jobs` with
+`X-API-Key`. The ZIP must contain `data.yaml` at its root, image directories
+referenced by its relative `train` and `val` entries, and YOLO-format labels.
+For example:
+
+```text
+data.yaml
+images/train/*.jpg
+images/val/*.jpg
+labels/train/*.txt
+labels/val/*.txt
+```
+
+`names` in `data.yaml` must define the class names. Epochs, image size, and
+batch are optional form fields (defaults: 50, 640, and 16). Uploads are capped
+at 2 GiB and extracted data at 20 GiB. The job status endpoint reports
+`queued`, `running`, `succeeded`, or `failed`; when successful,
+`GET /v1/training/jobs/{job_id}/model` downloads `best.pt`. Job status is held
+in memory, so download completed models before restarting the service. The
+training container stores run output in the persistent `yolo-training-runs`
+Docker volume.
+
 ## Production deployment (Ubuntu 24.04)
 
 Run commands from the project directory on the approved Linux host. Do not
@@ -325,5 +386,6 @@ credentials separately and never log stream URLs containing credentials.
 Do not open RTSP streams at this stage. Kafka, Kubernetes, Redis, and a
 database are unnecessary until measured scale or durability requirements
 justify their operational cost.
-#   s e v e r a p i  
+#   s e v e r a p i 
+ 
  
