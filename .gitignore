@@ -1,4 +1,5 @@
 .env
+.env.training
 .venv/
 venv/
 __pycache__/
@@ -11,3 +12,4 @@ models/*
 !models/.gitkeep
 logs/*
 !logs/.gitkeep
+training_runs/
